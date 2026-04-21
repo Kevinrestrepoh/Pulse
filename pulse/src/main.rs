@@ -27,10 +27,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = shutdown_tx_clone.send(());
     });
 
-    let metrics = metrics::metrics::Metrics::default();
+    let metrics = metrics::Metrics::default();
 
     let hub = ws::wshub::WsHub::new(metrics.clone());
-    let (broker, worker) = broker::broker::Broker::new(1024, hub.clone(), shutdown_tx.subscribe());
+    let (broker, worker) = broker::Broker::new(1024, hub.clone(), shutdown_tx.subscribe());
     tokio::spawn(async move {
         worker.run().await;
     });

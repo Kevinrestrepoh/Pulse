@@ -1,4 +1,4 @@
-use crate::{metrics::metrics::Metrics, models::event::Event};
+use crate::{metrics::Metrics, models::event::Event};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{RwLock, mpsc};
 

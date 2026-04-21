@@ -1,4 +1,4 @@
-use crate::{broker::broker::Broker, metrics::metrics::Metrics, models::event::Event};
+use crate::{broker::Broker, metrics::Metrics, models::event::Event};
 use axum::Json;
 use serde_json::json;
 

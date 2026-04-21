@@ -1,4 +1,4 @@
-use crate::{metrics::metrics::Metrics, models::event::Event, ws::wshub::WsHub};
+use crate::{metrics::Metrics, models::event::Event, ws::wshub::WsHub};
 use axum::{
     extract::{
         Query,

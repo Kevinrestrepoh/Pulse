@@ -1,4 +1,4 @@
-use crate::metrics::metrics::Metrics;
+use crate::metrics::Metrics;
 use axum::response::IntoResponse;
 use std::sync::atomic::Ordering;
 
