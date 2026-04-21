@@ -71,10 +71,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn shutdown_signal(shutdown_tx: broadcast::Sender<()>) {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("failed to install Ctrl+C handler");
-
     tracing::info!("Shutdown signal received");
 
     // Notify all workers
