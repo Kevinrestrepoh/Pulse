@@ -1,13 +1,12 @@
-use crate::{broker::Broker, metrics::Metrics, models::event::Event};
-use axum::Json;
+use crate::{AppState, models::event::Event};
+use axum::{Json, extract::State};
 use serde_json::json;
 
 pub async fn ingest_event(
+    State(state): State<AppState>,
     Json(event): Json<Event>,
-    broker: Broker,
-    metrics: Metrics,
 ) -> Json<serde_json::Value> {
-    metrics.inc_received();
+    state.metrics.inc_received();
 
     tracing::info!(
         event_id = %event.event_id,
@@ -16,6 +15,6 @@ pub async fn ingest_event(
     );
 
     let topic = event.payload.route_topic();
-    broker.publish(topic, event).await;
+    state.broker.publish(topic, event).await;
     Json(json!({ "message": "event created" }))
 }

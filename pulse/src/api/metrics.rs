@@ -1,8 +1,9 @@
-use crate::metrics::Metrics;
-use axum::response::IntoResponse;
+use crate::AppState;
+use axum::{extract::State, response::IntoResponse};
 use std::sync::atomic::Ordering;
 
-pub async fn metrics_handler(metrics: Metrics) -> impl IntoResponse {
+pub async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let metrics = state.metrics;
     format!(
         "events_received {}\nevents_delivered {}\ndropped_events {}\nactive_ws {}\n",
         metrics.events_received.load(Ordering::Relaxed),

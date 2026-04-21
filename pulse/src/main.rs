@@ -13,6 +13,14 @@ mod metrics;
 mod models;
 mod ws;
 
+#[derive(Clone)]
+struct AppState {
+    broker: broker::Broker,
+    hub: ws::wshub::WsHub,
+    metrics: metrics::Metrics,
+    shutdown_tx: broadcast::Sender<()>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
@@ -20,11 +28,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-    let shutdown_tx_clone = shutdown_tx.clone();
+    let shutdown_tx_graceful = shutdown_tx.clone();
+    let shutdown_tx_ctrlc = shutdown_tx.clone();
     tokio::spawn(async move {
         signal::ctrl_c().await.unwrap();
         tracing::info!("Shutdown signal received");
-        let _ = shutdown_tx_clone.send(());
+        let _ = shutdown_tx_ctrlc.send(());
     });
 
     let metrics = metrics::Metrics::default();
@@ -35,36 +44,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         worker.run().await;
     });
 
+    let state = AppState {
+        broker,
+        hub,
+        metrics,
+        shutdown_tx,
+    };
+
     let app = Router::new()
         .route("/health", get(api::health))
-        .route(
-            "/events",
-            post({
-                let broker = broker.clone();
-                let metrics = metrics.clone();
-                move |payload| api::events::ingest_event(payload, broker, metrics)
-            }),
-        )
-        .route(
-            "/ws",
-            get({
-                let hub = hub.clone();
-                let metrics = metrics.clone();
-                let shutdown_tx = shutdown_tx.clone();
-                move |ws, query| ws::handler::ws_handler(ws, query, hub, shutdown_tx, metrics)
-            }),
-        )
-        .route(
-            "/metrics",
-            get(move || api::metrics::metrics_handler(metrics.clone())),
-        );
+        .route("/events", post(api::events::ingest_event))
+        .route("/ws", get(ws::handler::ws_handler))
+        .route("/metrics", get(api::metrics::metrics_handler))
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     tracing::info!("Server listening on port {}", addr);
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(shutdown_tx.clone()))
+        .with_graceful_shutdown(shutdown_signal(shutdown_tx_graceful))
         .await
         .unwrap();
 

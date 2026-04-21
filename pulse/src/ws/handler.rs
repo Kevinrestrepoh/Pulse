@@ -1,7 +1,7 @@
-use crate::{metrics::Metrics, models::event::Event, ws::wshub::WsHub};
+use crate::{AppState, metrics::Metrics, models::event::Event, ws::wshub::WsHub};
 use axum::{
     extract::{
-        Query,
+        Query, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::IntoResponse,
@@ -14,16 +14,18 @@ use tokio::{
 };
 
 pub async fn ws_handler(
+    State(state): State<AppState>,
     ws: WebSocketUpgrade,
     Query(params): Query<HashMap<String, String>>,
-    hub: WsHub,
-    shutdown: broadcast::Sender<()>,
-    metrics: Metrics,
 ) -> impl IntoResponse {
     let topic = params
         .get("topic")
         .cloned()
         .unwrap_or_else(|| "default".into());
+
+    let hub = state.hub.clone();
+    let metrics = state.metrics.clone();
+    let shutdown = state.shutdown_tx.clone();
 
     ws.on_upgrade(move |socket| handle_socket(socket, hub, topic, shutdown.subscribe(), metrics))
 }
