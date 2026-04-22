@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn shutdown_signal(mut shutdown_tx: broadcast::Receiver<()>) {
-    let _ = shutdown_tx.recv().await;
+async fn shutdown_signal(mut shutdown_rx: broadcast::Receiver<()>) {
+    let _ = shutdown_rx.recv().await;
     tracing::info!("Shutdown signal received");
 }
