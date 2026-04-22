@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use crate::error::Result;
 use axum::{
     Router,
     routing::{get, post},
@@ -9,6 +10,7 @@ use tracing_subscriber;
 
 mod api;
 mod broker;
+mod error;
 mod metrics;
 mod models;
 mod ws;
@@ -22,7 +24,7 @@ struct AppState {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let addr: SocketAddr = "0.0.0.0:8080".parse()?;
 
@@ -31,9 +33,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shutdown_tx_graceful = shutdown_tx.clone();
     let shutdown_tx_ctrlc = shutdown_tx.clone();
     tokio::spawn(async move {
-        signal::ctrl_c().await.unwrap();
+        if let Err(e) = signal::ctrl_c().await {
+            tracing::error!("Failed to listen for Ctrl+C: {}", e);
+            return;
+        }
         tracing::info!("Shutdown signal received");
-        let _ = shutdown_tx_ctrlc.send(());
+        if let Err(e) = shutdown_tx_ctrlc.send(()) {
+            tracing::error!("Failed to send shutdown signal: {}", e);
+        }
     });
 
     let metrics = metrics::Metrics::default();
@@ -58,14 +65,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/metrics", get(api::metrics::metrics_handler))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await?;
 
     tracing::info!("Server listening on port {}", addr);
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal(shutdown_tx_graceful))
-        .await
-        .unwrap();
+        .await?;
 
     Ok(())
 }

@@ -1,11 +1,11 @@
 use crate::{AppState, models::event::Event};
-use axum::{Json, extract::State};
+use axum::{Json, extract::State, response::IntoResponse};
 use serde_json::json;
 
 pub async fn ingest_event(
     State(state): State<AppState>,
     Json(event): Json<Event>,
-) -> Json<serde_json::Value> {
+) -> impl IntoResponse {
     state.metrics.inc_received();
 
     tracing::info!(
@@ -15,6 +15,17 @@ pub async fn ingest_event(
     );
 
     let topic = event.payload.route_topic();
-    state.broker.publish(topic, event).await;
-    Json(json!({ "message": "event created" }))
+    match state.broker.publish(topic, event).await {
+        Ok(_) => (
+            axum::http::StatusCode::ACCEPTED,
+            Json(json!({ "message": "event created" })),
+        ),
+        Err(e) => {
+            tracing::error!("Failed to publish event: {}", e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Failed to process event" })),
+            )
+        }
+    }
 }

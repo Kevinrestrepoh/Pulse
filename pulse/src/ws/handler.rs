@@ -21,7 +21,7 @@ pub async fn ws_handler(
     let topic = params
         .get("topic")
         .cloned()
-        .unwrap_or_else(|| "default".into());
+        .unwrap_or_else(|| "default".to_string());
 
     let hub = state.hub.clone();
     let metrics = state.metrics.clone();
@@ -38,7 +38,12 @@ async fn handle_socket(
     metrics: Metrics,
 ) {
     let (tx, mut rx) = mpsc::channel::<Event>(32);
-    hub.subscribe(topic.clone(), tx).await;
+
+    if let Err(e) = hub.subscribe(topic.clone(), tx).await {
+        tracing::error!("Failed to subscribe to topic '{}': {}", topic, e);
+        let _ = socket.close().await;
+        return;
+    }
 
     let mut ticker = interval(Duration::from_millis(50));
     let mut buffer: Vec<Event> = Vec::with_capacity(32);
@@ -55,11 +60,19 @@ async fn handle_socket(
             }
             _ = ticker.tick() => {
                 if !buffer.is_empty() {
-                    let json = serde_json::to_string(&buffer).unwrap();
-                    if socket.send(Message::Text(Into::into(json))).await.is_err() {
-                        break;
+                    match serde_json::to_string(&buffer) {
+                        Ok(json) => {
+                            if let Err(e) = socket.send(Message::Text(Into::into(json))).await {
+                                tracing::error!("WebSocket connection error: {}", e);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to serialize events: {}", e);
+                            break;
+                        }
                     }
-                    let _ = buffer.close();
+                    buffer.clear();
                 }
             }
             _ = shutdown.recv() => {

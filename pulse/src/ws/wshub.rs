@@ -1,4 +1,4 @@
-use crate::{metrics::Metrics, models::event::Event};
+use crate::{metrics::Metrics, models::event::Event, error::{PulseError, Result}};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{RwLock, mpsc};
 
@@ -18,12 +18,21 @@ impl WsHub {
         }
     }
 
-    pub async fn subscribe(&self, topic: String, tx: SubscriberTx) {
+    pub async fn subscribe(&self, topic: String, tx: SubscriberTx) -> Result<()> {
+        if topic.is_empty() {
+            return Err(PulseError::InvalidTopic("Topic cannot be empty".to_string()));
+        }
+        
+        if topic.len() > 255 {
+            return Err(PulseError::InvalidTopic("Topic too long (max 255 chars)".to_string()));
+        }
+        
         let mut topics = self.topics.write().await;
         topics.entry(topic).or_default().push(tx);
+        Ok(())
     }
 
-    pub async fn publish(&self, topic: String, event: Event) {
+    pub async fn publish(&self, topic: String, event: Event) -> Result<()> {
         let topics = self.topics.read().await;
 
         if let Some(subscribers) = topics.get(&topic) {
@@ -32,9 +41,9 @@ impl WsHub {
             for sub in subscribers {
                 match priority {
                     crate::models::event::Priority::Critical => {
-                        if sub.send(event.clone()).await.is_ok() {
-                            self.metrics.inc_delivered(1);
-                        }
+                        sub.send(event.clone()).await
+                            .map_err(|e| PulseError::Channel(format!("Critical event send failed: {}", e)))?;
+                        self.metrics.inc_delivered(1);
                     }
                     crate::models::event::Priority::Normal => match sub.try_send(event.clone()) {
                         Ok(_) => {
@@ -48,5 +57,6 @@ impl WsHub {
                 }
             }
         }
+        Ok(())
     }
 }
