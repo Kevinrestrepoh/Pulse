@@ -15,7 +15,7 @@ pub struct Broker {
 #[derive(Clone)]
 pub struct BrokerMessage {
     pub topic: String,
-    pub event: Event,
+    pub event: Arc<Event>,
 }
 
 impl Broker {
@@ -34,7 +34,7 @@ impl Broker {
         (broker, worker)
     }
 
-    pub async fn publish(&self, topic: String, event: Event) -> Result<()> {
+    pub async fn publish(&self, topic: String, event: Arc<Event>) -> Result<()> {
         let msg = BrokerMessage { topic, event };
         self.sender
             .send(msg)
@@ -56,7 +56,7 @@ impl BrokerWorker {
             tokio::select! {
                 maybe_msg = self.receiver.recv() => {
                     if let Some(msg) = maybe_msg {
-                        if let Err(e) = self.hub.publish(msg.topic, Arc::new(msg.event)).await {
+                        if let Err(e) = self.hub.publish(msg.topic, msg.event).await {
                             tracing::error!("Failed to publish event to hub: {}", e);
                         }
                     } else {

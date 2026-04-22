@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{AppState, models::event::Event};
 use axum::{Json, extract::State, response::IntoResponse};
 use serde_json::json;
@@ -13,6 +15,8 @@ pub async fn ingest_event(
         payload = ?event.payload,
         "Event ingested"
     );
+
+    let event = Arc::new(event);
 
     let topic = event.payload.route_topic();
     match state.broker.publish(topic, event).await {
