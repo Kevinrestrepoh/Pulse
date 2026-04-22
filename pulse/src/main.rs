@@ -70,15 +70,13 @@ async fn main() -> Result<()> {
     tracing::info!("Server listening on port {}", addr);
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(shutdown_tx_graceful))
+        .with_graceful_shutdown(shutdown_signal(shutdown_tx_graceful.subscribe()))
         .await?;
 
     Ok(())
 }
 
-async fn shutdown_signal(shutdown_tx: broadcast::Sender<()>) {
+async fn shutdown_signal(mut shutdown_tx: broadcast::Receiver<()>) {
+    let _ = shutdown_tx.recv().await;
     tracing::info!("Shutdown signal received");
-
-    // Notify all workers
-    let _ = shutdown_tx.send(());
 }
