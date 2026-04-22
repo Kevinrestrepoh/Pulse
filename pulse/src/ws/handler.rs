@@ -7,7 +7,7 @@ use axum::{
     response::IntoResponse,
 };
 use futures::SinkExt;
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
     sync::{broadcast, mpsc},
     time::interval,
@@ -37,7 +37,7 @@ async fn handle_socket(
     mut shutdown: broadcast::Receiver<()>,
     metrics: Metrics,
 ) {
-    let (tx, mut rx) = mpsc::channel::<Event>(32);
+    let (tx, mut rx) = mpsc::channel::<Arc<Event>>(32);
 
     if let Err(e) = hub.subscribe(topic.clone(), tx).await {
         tracing::error!("Failed to subscribe to topic '{}': {}", topic, e);
@@ -46,7 +46,7 @@ async fn handle_socket(
     }
 
     let mut ticker = interval(Duration::from_millis(50));
-    let mut buffer: Vec<Event> = Vec::with_capacity(32);
+    let mut buffer: Vec<Arc<Event>> = Vec::with_capacity(32);
 
     metrics.inc_ws();
 
@@ -60,7 +60,10 @@ async fn handle_socket(
             }
             _ = ticker.tick() => {
                 if !buffer.is_empty() {
-                    match serde_json::to_string(&buffer) {
+                    let s = serde_json::to_string(
+                        &buffer.iter().map(|e| e.as_ref()).collect::<Vec<_>>()
+                    );
+                    match s {
                         Ok(json) => {
                             if let Err(e) = socket.send(Message::Text(Into::into(json))).await {
                                 tracing::error!("WebSocket connection error: {}", e);

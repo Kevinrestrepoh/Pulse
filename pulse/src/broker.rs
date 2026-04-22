@@ -1,4 +1,10 @@
-use crate::{models::event::Event, ws::wshub::WsHub, error::{PulseError, Result}};
+use std::sync::Arc;
+
+use crate::{
+    error::{PulseError, Result},
+    models::event::Event,
+    ws::wshub::WsHub,
+};
 use tokio::sync::{broadcast, mpsc};
 
 #[derive(Clone)]
@@ -30,7 +36,9 @@ impl Broker {
 
     pub async fn publish(&self, topic: String, event: Event) -> Result<()> {
         let msg = BrokerMessage { topic, event };
-        self.sender.send(msg).await
+        self.sender
+            .send(msg)
+            .await
             .map_err(|e| PulseError::Broker(format!("Failed to publish event to broker: {}", e)))?;
         Ok(())
     }
@@ -48,7 +56,7 @@ impl BrokerWorker {
             tokio::select! {
                 maybe_msg = self.receiver.recv() => {
                     if let Some(msg) = maybe_msg {
-                        if let Err(e) = self.hub.publish(msg.topic, msg.event).await {
+                        if let Err(e) = self.hub.publish(msg.topic, Arc::new(msg.event)).await {
                             tracing::error!("Failed to publish event to hub: {}", e);
                         }
                     } else {
